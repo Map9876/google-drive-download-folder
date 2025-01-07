@@ -47,6 +47,7 @@ wget "https://c.map987.us.kg/https://drive.usercontent.google.com/download?id={F
 
 最终是
 ```
+
 import os
 import os.path as osp
 import re
@@ -147,9 +148,15 @@ def _download_and_parse_google_drive_link(
     """Get folder structure of Google Drive folder URL."""
 
     return_code = True
-
+    url_= proxy_ + url #这里改用url_
     for _ in range(2):
-        res = sess.get(url, verify=verify)
+        
+        print("测试rr")
+        #url= proxy_ + url #第二次会累加导致链接中有两https://套娃，这里改用url_
+        print(url_)
+        res = sess.get(url_, verify=verify) #这里改用url_  根据函数内line107出报错修改
+        print(res.status_code)
+        
 
         url = res.url
 
@@ -185,8 +192,8 @@ def _download_and_parse_google_drive_link(
             )
         return_code, child = _download_and_parse_google_drive_link(
             sess=sess,
-            url= proxy_ + "https://drive.google.com/drive/folders/" + child_id,
-            
+            url= "https://drive.google.com/drive/folders/" + child_id,
+            #这里不需要了proxy_ + url
             quiet=quiet,
             remaining_ok=remaining_ok,
         )
@@ -210,6 +217,127 @@ def _get_directory_structure(gdrive_file, previous_path):
     """Converts a Google Drive folder structure into a local directory list."""
 
     directory_structure = []
-    for file in gdrive_file.ch
+    for file in gdrive_file.children:
+        file.name = file.name.replace(osp.sep, "_")
+        if file.is_folder():
+            directory_structure.append((None, osp.join(previous_path, file.name)))
+            for i in _get_directory_structure(file, osp.join(previous_path, file.name)):
+                directory_structure.append(i)
+        elif not file.children:
+            directory_structure.append((file.id, osp.join(previous_path, file.name)))
+    print(directory_structure, "\n")
+    return directory_structure
+
+
+GoogleDriveFileToDownload = collections.namedtuple(
+    "GoogleDriveFileToDownload", ("id", "path", "local_path")
+)
+
+
+def download_folder(
+    proxy_="https://c.map987.us.kg/",
+    url=None,
+    id=None,
+    output=None,
+    quiet=False,
+    proxy=None,
+    speed=None,
+    use_cookies=True,
+    remaining_ok=False,
+    verify=True,
+    user_agent=None,
+    skip_download: bool = False,
+    resume=False,
+) -> Union[List[str], List[GoogleDriveFileToDownload], None]:
+    print(proxy_)
+    if not (id is None) ^ (url is None):
+        raise ValueError("Either url or id has to be specified")
+    if id is not None:
+        
+        url = proxy_ + "https://drive.google.com/drive/folders/{id}".format(id=id)
+    if user_agent is None:
+        # We need to use different user agent for folder download c.f., file
+        user_agent = "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/98.0.4758.102 Safari/537.36"  # NOQA: E501
+
+  #  sess = _get_session(proxy=proxy, use_cookies=use_cookies, user_agent=user_agent)
+    sess = requests.session()
+
+
+    if not quiet:
+        print("Retrieving folder contents", file=sys.stderr)
+    is_success, gdrive_file = _download_and_parse_google_drive_link(
+        sess,
+        url,
+        quiet=quiet,
+        remaining_ok=remaining_ok,
+        verify=verify,
+        proxy_="https://c.map987.us.kg/",
+    )# 这个403超时
+    if not is_success:
+        print("Failed to retrieve folder contents", file=sys.stderr)
+        return None
+
+    if not quiet:
+        print("Retrieving folder contents completed", file=sys.stderr)
+        print("Building directory structure", file=sys.stderr)
+    directory_structure = _get_directory_structure(gdrive_file, previous_path="")
+    sys.exit()
+    if not quiet:
+        print("Building directory structure completed", file=sys.stderr)
+
+    if output is None:
+        output = os.getcwd() + osp.sep
+    if output.endswith(osp.sep):
+        root_dir = osp.join(output, gdrive_file.name)
+    else:
+        root_dir = output
+    if not skip_download and not osp.exists(root_dir):
+        os.makedirs(root_dir)
+
+    files = []
+    for id, path in directory_structure:
+        local_path = osp.join(root_dir, path)
+
+        if id is None:  # folder
+            if not skip_download and not osp.exists(local_path):
+                os.makedirs(local_path)
+            continue
+
+        if skip_download:
+            files.append(
+                GoogleDriveFileToDownload(id=id, path=path, local_path=local_path)
+            )
+        else:
+            if resume and os.path.isfile(local_path):
+                if not quiet:
+                    print(
+                        f"Skipping already downloaded file {local_path}",
+                        file=sys.stderr,
+                    )
+                files.append(local_path)
+                continue
+
+            local_path = download(
+                url= proxy_ + "https://drive.google.com/uc?id=" + id,
+                output=local_path,
+                quiet=quiet,
+                proxy=proxy,
+                speed=speed,
+                use_cookies=use_cookies,
+                verify=verify,
+                resume=resume,
+            )
+            if local_path is None:
+                if not quiet:
+                    print("Download ended unsuccessfully", file=sys.stderr)
+                return None
+            files.append(local_path)
+    if not quiet:
+        print("Download completed", file=sys.stderr)
+    return files
+    
+    
+    
+download_folder(url="https://drive.google.com/drive/folders/1qkE99m4OhtoulzR1Rpzd8_RQkTtb0-_L?usp=drive_link", proxy_="https://c.map987.us.kg/",)
 
 ```
