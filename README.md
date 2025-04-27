@@ -341,3 +341,8 @@ def download_folder(
 download_folder(url="https://drive.google.com/drive/folders/1qkE99m4OhtoulzR1Rpzd8_RQkTtb0-_L?usp=drive_link", proxy_="https://c.map987.us.kg/",)
 
 ```
+
+
+创建 cloudflare workers ， 
+https://github.com/ymyuuu/Cloudflare-Workers-Proxy/blob/main/worker.js
+复制如上代码，之后把 workers，绑定自己的子域名
